@@ -116,7 +116,6 @@ jobs:
   build_gateway_and_push_to_docker_hub:
     name: Push gateway Docker image to DockerHub
     runs-on: ubuntu-latest
-    if: ${{ hashFiles('gateway/Dockerfile') != '' }}
     needs:
       - tests
       - frontend_tests
@@ -124,18 +123,34 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v3
 
+      - name: Check gateway directory
+        id: gateway_check
+        run: |
+          if [ -f gateway/Dockerfile ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Docker Buildx
+        if: steps.gateway_check.outputs.exists == 'true'
         uses: docker/setup-buildx-action@v2
 
       - name: Login to Docker
+        if: steps.gateway_check.outputs.exists == 'true'
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Push to DockerHub
+        if: steps.gateway_check.outputs.exists == 'true'
         uses: docker/build-push-action@v4
         with:
           context: ./gateway/
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/taski_gateway:latest
+
+      - name: Skip gateway build
+        if: steps.gateway_check.outputs.exists != 'true'
+        run: echo "gateway/Dockerfile not found, skipping gateway image build"
