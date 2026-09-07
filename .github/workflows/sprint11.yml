@@ -1,0 +1,60 @@
+name: Sprint 11 Docker Hub publication
+on:
+  push:
+    branches: [sprint11-publish]
+permissions:
+  contents: read
+env:
+  SOURCE_SHA: e5db717906b14548acacf4653268905a09348b80
+jobs:
+  build:
+    name: docker-${{ matrix.service }}-job
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [frontend, backend]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Mezhnun89/taski
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in using existing Docker Hub credential
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Build and publish commit tag
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.service }}
+          push: true
+          tags: mezhnun/taski-${{ matrix.service }}:sprint11-${{ env.SOURCE_SHA }}
+          cache-from: type=gha,scope=sprint11-${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=sprint11-${{ matrix.service }}
+  pull-and-run:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Mezhnun89/taski
+          ref: ${{ env.SOURCE_SHA }}
+      - name: Pull published images onto a fresh runner
+        run: |
+          docker pull "mezhnun/taski-frontend:sprint11-$SOURCE_SHA"
+          docker pull "mezhnun/taski-backend:sprint11-$SOURCE_SHA"
+      - name: Run the published images
+        run: make run FRONTEND_IMAGE="mezhnun/taski-frontend:sprint11-$SOURCE_SHA" BACKEND_IMAGE="mezhnun/taski-backend:sprint11-$SOURCE_SHA"
+      - name: Verify HTTP and CRUD
+        run: python3 scripts/check_taski.py
+      - name: Report image digests
+        run: |
+          docker image inspect "mezhnun/taski-frontend:sprint11-$SOURCE_SHA" --format '{{json .RepoDigests}}' | tee -a "$GITHUB_STEP_SUMMARY"
+          docker image inspect "mezhnun/taski-backend:sprint11-$SOURCE_SHA" --format '{{json .RepoDigests}}' | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Clean up
+        if: always()
+        run: make clear
