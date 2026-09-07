@@ -31,7 +31,9 @@ jobs:
         with:
           context: ./${{ matrix.service }}
           push: true
-          tags: mezhnun/taski-${{ matrix.service }}:sprint11-${{ env.SOURCE_SHA }}
+          tags: |
+            mezhnun/taski-${{ matrix.service }}:sprint11-${{ env.SOURCE_SHA }}
+            mezhnun/taski-${{ matrix.service }}:multi-stage
           cache-from: type=gha,scope=sprint11-${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=sprint11-${{ matrix.service }}
   pull-and-run:
