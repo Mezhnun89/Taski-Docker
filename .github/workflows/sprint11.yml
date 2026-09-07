@@ -60,3 +60,33 @@ jobs:
       - name: Clean up
         if: always()
         run: make clear
+  jenkins-pipeline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare temporary Jenkins with Pipeline plugins
+        run: docker build -t sprint11-jenkins .ci/jenkins
+      - name: Execute actual Jenkinsfile on a temporary controller
+        env:
+          DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_TOKEN: ${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          export JENKINS_TEST_PASSWORD=$(openssl rand -hex 32)
+          echo "::add-mask::$JENKINS_TEST_PASSWORD"
+          docker run -d --name sprint11-jenkins --user root --network host -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_USER -e DOCKER_TOKEN -e JENKINS_TEST_PASSWORD -e JAVA_OPTS="-Djenkins.install.runSetupWizard=false" sprint11-jenkins --httpListenAddress=127.0.0.1
+          python3 .ci/jenkins/poll.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jenkins-evidence
+          path: |
+            jenkins-console.log
+            jenkins-result.json
+      - name: Remove temporary Jenkins and lesson containers
+        if: always()
+        run: |
+          docker rm -f sprint11-jenkins
+          for name in taski-frontend taski-backend; do
+            if docker container inspect "$name" >/dev/null 2>&1; then docker rm -f "$name"; fi
+          done
